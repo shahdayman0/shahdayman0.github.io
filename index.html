@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ar">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <title>Ramallah Waste Dashboard</title>
@@ -26,9 +26,9 @@
       --round: 10px;
       --shadow: 0 6px 18px rgba(20,30,40,0.08);
     }
-    html,body,#map { height: 100%; margin:0; padding:0; font-family: Inter, ui-sans-serif, system-ui; background: var(--bg); color: #0f172a; }
 
-    /* Top controls / header */
+    html,body,#map { height: 100%; margin:0; padding:0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; background: var(--bg); color: #0f172a; }
+
     .topbar {
       position: absolute;
       left: 50%;
@@ -44,26 +44,16 @@
       padding: 8px 12px;
       box-shadow: var(--shadow);
     }
-    .stat {
-      display:flex; flex-direction:column; align-items:center; padding:6px 12px; border-radius:8px;
-      background: linear-gradient(180deg, rgba(255,255,255,0.85), rgba(250,250,250,0.85));
-      min-width:110px;
-    }
+    .stat { display:flex; flex-direction:column; align-items:center; padding:6px 12px; border-radius:8px; background: linear-gradient(180deg, rgba(255,255,255,0.85), rgba(250,250,250,0.85)); min-width:110px; }
     .stat .num { font-weight:700; font-size:18px; color: var(--accent); }
     .stat .label { font-size:12px; color:var(--muted); margin-top:4px; }
 
     .controls { display:flex; gap:8px; align-items:center; }
-    .btn {
-      background: var(--accent);
-      color:white; border:none; padding:8px 12px; border-radius:8px; cursor:pointer;
-      box-shadow: 0 4px 10px rgba(43,138,120,0.18); font-weight:600;
-    }
+    .btn { background: var(--accent); color:white; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; box-shadow: 0 4px 10px rgba(43,138,120,0.18); font-weight:600; }
     .btn.secondary { background:transparent; color:var(--accent); border:1px solid rgba(43,138,120,0.14); box-shadow:none; }
 
-    /* Map container */
     #map { position:absolute; inset:0; z-index:0; }
 
-    /* Sidebar */
     .sidebar {
       position: absolute;
       top: 72px;
@@ -78,7 +68,8 @@
       padding: 14px;
     }
     .sidebar.hidden { transform: translateX(110%); }
-    .sidebar.right { right: 18px; transform: translateX(110%); direction: rtl; }
+    .sidebar.left { left: 18px; transform: translateX(-110%); }
+    .sidebar.right { right: 18px; transform: translateX(110%); }
     .sidebar.open { transform: translateX(0); }
     .sidebar h3 { margin:0 0 8px 0; color:#0f172a; }
     .sidebar .meta { font-size:13px; color:var(--muted); margin-bottom:6px; }
@@ -92,7 +83,6 @@
     .analyze-area { margin-top:10px; display:flex; gap:8px; }
     .text-input { flex:1; padding:8px 10px; border-radius:8px; border:1px solid rgba(15,23,42,0.06); background:white; }
 
-    /* Legend */
     .legend {
       position:absolute; left:12px; bottom:18px; z-index:1200;
       background:var(--card); padding:10px 12px; border-radius:10px; box-shadow: var(--shadow);
@@ -101,49 +91,37 @@
     .legend .row{ display:flex; align-items:center; gap:8px; margin:6px 0; }
     .swatch { width:18px; height:12px; border-radius:4px; }
 
-    /* Popup custom */
     .leaflet-popup-content-wrapper { border-radius:10px; box-shadow:var(--shadow); }
     .popup-title { font-weight:700; margin-bottom:6px; color:#072020; display:flex; gap:8px; align-items:center; }
     .popup-body { font-size:13px; color:var(--muted); }
     .popup-actions { margin-top:8px; display:flex; gap:8px; }
 
-    /* responsive smaller screens */
     @media (max-width:720px){
       .sidebar { width: 86%; top:78px; padding:12px; }
       .topbar { left: 12px; transform:none; }
-    }
-
-    /* Splash screen */
-    #splashScreen{
-      position:absolute; inset:0; background:white; z-index:2000; display:flex; justify-content:center; align-items:center; font-size:2em; font-weight:700;
-    }
-
-    /* Auto Explore button */
-    #autoExploreBtn{
-      position:absolute; top:72px; left:50%; transform:translateX(-50%); z-index:1400;
     }
   </style>
 </head>
 <body>
 
-  <!-- Splash -->
-  <div id="splashScreen">🌍 Ramallah Waste Management Explorer</div>
-
-  <!-- Topbar -->
+  <!-- Top bar stats & controls -->
   <div class="topbar" id="topbar">
     <div class="stat"><div class="num" id="zonesCount">—</div><div class="label">عدد المناطق</div></div>
     <div class="stat"><div class="num" id="containersCount">—</div><div class="label">عدد الحاويات</div></div>
-    <div style="width:12px"></div>
     <div class="controls">
-      <button class="btn" id="zoomTopBtn" title="Zoom to zone with most containers">تكبير ▶ أكبر منطقة</button>
+      <button class="btn" id="zoomTopBtn" title="Zoom to top zone">تكبير ▶ أكبر منطقة</button>
       <button class="btn secondary" id="toggleLegend">Legend</button>
     </div>
   </div>
 
-  <!-- Map -->
+  <!-- Auto Explore & Stop Buttons -->
+  <div style="position:absolute; top:110px; left:50%; transform:translateX(-50%); z-index:1400; display:flex; gap:8px;">
+    <button id="autoExploreBtn" class="btn">▶ استكشف تلقائيًا</button>
+    <button id="stopExploreBtn" class="btn secondary">■ إيقاف الاستكشاف</button>
+  </div>
+
   <div id="map"></div>
 
-  <!-- Sidebar -->
   <div id="sidebar" class="sidebar right hidden" role="complementary" aria-hidden="true">
     <button class="close-x" id="closeSidebar" title="Close">✕</button>
     <h3 id="sidebarTitle">تفاصيل</h3>
@@ -155,11 +133,9 @@
         <input id="aiInput" class="text-input" placeholder="اكتب: حلّللي أماكن فيها قلة حاويات" />
         <button class="btn" id="analyzeBtn">حلّل</button>
       </div>
-      <div style="margin-top:10px; font-size:13px; color:var(--muted);">التحليل يعتمد على قواعد إحصائية داخلية (محاكاة AI).</div>
     </div>
   </div>
 
-  <!-- Legend -->
   <div id="legend" class="legend" style="display:none;">
     <div style="font-weight:700; margin-bottom:6px;">Legend</div>
     <div class="row"><div class="swatch" style="background: #fde68a"></div><div>منطقة (نسبة حاويات منخفضة)</div></div>
@@ -167,15 +143,16 @@
     <div class="row"><div class="swatch" style="background: orange"></div><div>حاويات</div></div>
   </div>
 
-  <!-- Auto Explore -->
-  <button id="autoExploreBtn" class="btn">▶ استكشف تلقائيًا</button>
-
   <script>
-    // ---------- SETTINGS ----------
     const ZONES_FILE = 'RamallahZones.json';
     const CONTAINERS_FILE = 'wasteContainer.json';
 
-    const sidebar = document.getElementById('sidebar');
+    const map = L.map('map', { zoomSnap: 0.25 }).setView([31.9045, 35.2045], 13);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{ maxZoom:20, attribution:'&copy; OpenStreetMap contributors &copy; CARTO' }).addTo(map);
+
+    let zonesLayer=null, containersLayer=null, zonesGeoJSON=null, containersGeoJSON=null, lowZoneIds=new Set();
+    let stopAutoExplore = false;
+
     const zonesCountEl = document.getElementById('zonesCount');
     const containersCountEl = document.getElementById('containersCount');
     const closeSidebarBtn = document.getElementById('closeSidebar');
@@ -184,148 +161,82 @@
     const aiInput = document.getElementById('aiInput');
     const analyzeBtn = document.getElementById('analyzeBtn');
     const zoomTopBtn = document.getElementById('zoomTopBtn');
-    const legendEl = document.getElementById('legend');
     const toggleLegendBtn = document.getElementById('toggleLegend');
     const autoExploreBtn = document.getElementById('autoExploreBtn');
+    const stopExploreBtn = document.getElementById('stopExploreBtn');
+    const sidebar = document.getElementById('sidebar');
 
-    toggleLegendBtn.addEventListener('click', ()=> {
-      legendEl.style.display = legendEl.style.display === 'none' ? 'block' : 'none';
-    });
-    closeSidebarBtn.addEventListener('click', ()=> { closeSidebar(); });
+    toggleLegendBtn.addEventListener('click', ()=>{ legend.style.display = legend.style.display==='none'?'block':'none'; });
+    closeSidebarBtn.addEventListener('click', ()=> sidebar.classList.add('hidden'));
 
-    function openSidebar(){ sidebar.classList.remove('hidden'); sidebar.classList.add('open'); sidebar.setAttribute('aria-hidden','false'); }
-    function closeSidebar(){ sidebar.classList.add('hidden'); sidebar.classList.remove('open'); sidebar.setAttribute('aria-hidden','true'); }
-
-    // ---------- MAP ----------
-    const map = L.map('map', { zoomSnap: 0.25 }).setView([31.9045, 35.2045], 13);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{
-      maxZoom:20, attribution:'&copy; OpenStreetMap &copy; CARTO'
-    }).addTo(map);
-
-    // global layers
-    let zonesLayer = null;
-    let containersLayer = null;
-    let zonesGeoJSON = null;
-    let containersGeoJSON = null;
-    const lowZoneIds = new Set();
-
-    // ---------- ICONS ----------
-    function binIconSVG(size=18){
-      return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none">
-        <rect x="9" y="3" width="6" height="2" fill="${getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#2b8a78'}"/>
-        <path d="M6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7z" fill="orange"/>
-      </svg>`;
-    }
-    function zoneIconSVG(size=18){
-      return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none">
-        <circle cx="12" cy="12" r="9" fill="#a7f3d0"/>
-        <path d="M7 12h10" stroke="#065f46" stroke-width="1.5" stroke-linecap="round"/>
-      </svg>`;
-    }
+    function binIconSVG(size=18){ return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none"><rect x="9" y="3" width="6" height="2" fill="#2b8a78"/><path d="M6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7z" fill="orange"/></svg>`;}
+    function zoneIconSVG(size=18){ return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" fill="#a7f3d0"/><path d="M7 12h10" stroke="#065f46" stroke-width="1.5" stroke-linecap="round"/></svg>`;}
 
     function makePopupHTML(type, properties){
-      const title = properties.NAME_ENGLI || properties.NAME || properties.TYPE_OF_WA || properties.name || '—';
-      const icon = type==='zone'? zoneIconSVG(20) : binIconSVG(18);
-      const propsList = Object.entries(properties).map(([k,v]) => `<div style="display:flex;justify-content:space-between;margin:4px 0;"><div style="color:var(--muted);font-size:13px">${k}</div><div style="font-weight:700">${v}</div></div>`).join('');
-      return `<div style="min-width:220px"><div class="popup-title">${icon}<div>${title}</div></div><div class="popup-body">${propsList}</div></div>`;
-    }
-
-    function showSidebarFor(type, properties){
-      openSidebar();
-      const title = properties.NAME_ENGLI || properties.NAME || properties.TYPE_OF_WA || properties.name || (type==='zone'? 'منطقة':'حاوية');
-      document.getElementById('sidebarTitle').textContent = title;
-      sidebarMeta.textContent = 'تفاصيل العنصر';
-
-      let html = '';
-      html += `<div class="info-row"><div class="icon-box">${type==='zone'? zoneIconSVG(): binIconSVG()}</div><div style="flex:1"><div class="info-key">الاسم</div><div class="info-val">${title}</div></div></div>`;
-      const skipKeys = ['geometry'];
-      for(const [k,v] of Object.entries(properties)){
-        if(skipKeys.includes(k)) continue;
-        html += `<div style="padding:8px 0;border-bottom:1px dashed rgba(15,23,42,0.04)"><div style="font-size:13px;color:var(--muted)">${k}</div><div style="font-weight:700">${v}</div></div>`;
-      }
-      html += `<div style="margin-top:10px; display:flex; gap:8px;"><button class="btn" id="zoomToFeatureBtn">تكبير للعنصر</button><button class="btn secondary" id="closeSideSmall">اغلاق</button></div>`;
-      sidebarContent.innerHTML = html;
-
-      document.getElementById('zoomToFeatureBtn').addEventListener('click', ()=> {
-        let found=null;
-        if(type==='zone') zonesLayer.eachLayer(l=>{if(l.feature && (l.feature.properties.NAME_ENGLI===properties.NAME_ENGLI || l.feature.properties.NAME===properties.NAME)) found=l;});
-        else containersLayer.eachLayer(l=>{if(l.feature && (l.feature.properties.ID===properties.ID || l.feature.properties.name===properties.name)) found=l;});
-        if(found) map.fitBounds(found.getBounds?found.getBounds():L.latLngBounds(found.getLatLng(),found.getLatLng()), {maxZoom:18,padding:[30,30]});
-      });
-      document.getElementById('closeSideSmall').addEventListener('click', ()=> closeSidebar());
+      const title = properties.NAME_ENGLI||properties.NAME||properties.TYPE_OF_WA||properties.name||'—';
+      const icon = type==='zone'?zoneIconSVG(20):binIconSVG(18);
+      return `<div style="min-width:220px"><div class="popup-title">${icon}<div>${title}</div></div></div>`;
     }
 
     async function loadData(){
-      const [zonesResp, containersResp] = await Promise.all([fetch(ZONES_FILE), fetch(CONTAINERS_FILE)]);
-      zonesGeoJSON = await zonesResp.json();
-      containersGeoJSON = await containersResp.json();
-      buildContainersLayer();
-      buildZonesLayer();
-      zonesLayer.addTo(map); containersLayer.addTo(map);
+      const [zonesResp, contResp] = await Promise.all([fetch(ZONES_FILE), fetch(CONTAINERS_FILE)]);
+      zonesGeoJSON = await zonesResp.json(); containersGeoJSON = await contResp.json();
+
+      buildContainersLayer(); buildZonesLayer();
       zonesCountEl.textContent = zonesGeoJSON.features.length;
       containersCountEl.textContent = containersGeoJSON.features.length;
-      map.fitBounds(L.featureGroup([zonesLayer,containersLayer]).getBounds(),{padding:[30,30]});
+      zonesLayer.addTo(map); containersLayer.addTo(map);
+      map.fitBounds(L.featureGroup([zonesLayer, containersLayer]).getBounds(), {padding:[30,30]});
     }
 
     function buildContainersLayer(){
-      containersLayer=L.geoJSON(containersGeoJSON,{
-        pointToLayer:(f,latlng)=>L.circleMarker(latlng,{radius:5,fillColor:'orange',color:'orange',weight:1,opacity:1,fillOpacity:0.9}),
-        onEachFeature:(f,l)=>{l.bindPopup(makePopupHTML('container',f.properties)).on('click',()=>showSidebarFor('container',f.properties));}
+      containersLayer = L.geoJSON(containersGeoJSON,{
+        pointToLayer: (f,latlng)=>L.circleMarker(latlng,{radius:5,fillColor:'orange',color:'orange',weight:1,opacity:1,fillOpacity:0.9})
       });
     }
+
     function buildZonesLayer(){
-      zonesLayer=L.geoJSON(zonesGeoJSON,{
-        style: f=>({ fillColor:lowZoneIds.has(f.properties.ID)?'red':'#a7f3d0', fillOpacity:0.35, color:lowZoneIds.has(f.properties.ID)?'#e06464':'#9ae6b4', weight:1, opacity:0.9 }),
-        onEachFeature:(f,l)=>{l.bindPopup(makePopupHTML('zone',f.properties)).on('click',()=>showSidebarFor('zone',f.properties));}
+      zonesLayer = L.geoJSON(zonesGeoJSON,{
+        style: f=>{ const id = f.properties.ID||Math.random(); const base={fillColor:'#a7f3d0',fillOpacity:0.35,color:'#9ae6b4',weight:1,opacity:0.9}; if(lowZoneIds.has(id)) return {...base, fillColor:'#fde68a', color:'#facc15'}; return base;}
       });
     }
 
     function computeCountsPerZone(){
-      const counts={}; if(!zonesGeoJSON||!containersGeoJSON) return counts;
-      for(let i=0;i<zonesGeoJSON.features.length;i++){
-        const poly=zonesGeoJSON.features[i];
-        const pid=poly.properties.ID||i;
-        try{const ptsWithin=turf.pointsWithinPolygon(containersGeoJSON,poly); counts[pid]=ptsWithin.features.length;}catch(e){counts[pid]=0;}
-      }
+      const counts = {};
+      zonesGeoJSON.features.forEach(poly=>{
+        const id = poly.properties.ID||poly.properties.MAIL_CODE||poly.properties.NAME_ENGLI||Math.random();
+        try{ counts[id] = turf.pointsWithinPolygon(containersGeoJSON, poly).features.length; } catch(e){ counts[id]=0; }
+      });
       return counts;
     }
 
-    function findTopZone(zoneCounts){let maxId=null,maxCount=-1;for(const [k,v] of Object.entries(zoneCounts)) if(v>maxCount){maxCount=v;maxId=k;}return maxId;}
+    function findTopZone(counts){ let maxId=null,maxCount=-1; for(const [k,v] of Object.entries(counts)) if(v>maxCount){maxCount=v;maxId=k;} return maxId;}
 
-    zoomTopBtn.addEventListener('click',()=>{
+    zoomTopBtn.addEventListener('click', ()=>{
       const counts = computeCountsPerZone();
       const topId = findTopZone(counts);
-      zonesLayer.eachLayer(l=>{
-        if(l.feature && (l.feature.properties.ID==topId)){ map.fitBounds(l.getBounds(),{maxZoom:17,padding:[20,20]}); l.openPopup(); }
-      });
+      zonesLayer.eachLayer(l=>{ if(l.feature&&l.feature.properties.ID==topId){ map.fitBounds(l.getBounds(),{maxZoom:17,padding:[20,20]}); l.openPopup(); } });
     });
 
-    analyzeBtn.addEventListener('click',()=>{
-      const cmd=(aiInput.value||'').trim().toLowerCase();
-      if(!cmd) return alert('اكتب أمر التحليل');
-      const counts=computeCountsPerZone();
-      const values=Object.values(counts).sort((a,b)=>a-b); const q25=values[Math.floor(values.length*0.25)]||0;
-      lowZoneIds.clear();
-      for(const [id,cnt] of Object.entries(counts)) if(cnt<=q25) lowZoneIds.add(String(id));
+    analyzeBtn.addEventListener('click', ()=>{
+      const counts = computeCountsPerZone(); const values=Object.values(counts).sort((a,b)=>a-b); const q25=values[Math.floor(values.length*0.25)]||0;
+      lowZoneIds.clear(); for(const [id,cnt] of Object.entries(counts)) if(cnt<=q25) lowZoneIds.add(String(id));
       zonesLayer.remove(); buildZonesLayer(); zonesLayer.addTo(map);
-      alert(`تم تمييز المناطق ذات قلة الحاويات باللون الأحمر`);
+      alert('تم تمييز المناطق ذات قلة الحاويات باللون الأحمر');
     });
 
-    // ---------- Splash ----------
-    window.addEventListener('load',()=>{ setTimeout(()=>{ const s=document.getElementById('splashScreen'); s.style.transition='opacity 0.8s'; s.style.opacity='0'; setTimeout(()=>s.remove(),800); },2000); });
-
-    // ---------- Auto Explore ----------
     autoExploreBtn.addEventListener('click', ()=> autoExplore());
+
+    stopExploreBtn.addEventListener('click', ()=> { stopAutoExplore = true; map.closePopup(); });
 
     async function autoExplore(){
       if(!containersGeoJSON||!zonesGeoJSON) return alert('البيانات لم تُحمّل بعد');
+      stopAutoExplore = false;
       const points=[];
       containersGeoJSON.features.forEach(f=>points.push({lat:f.geometry.coordinates[1], lon:f.geometry.coordinates[0], type:'container', props:f.properties}));
-      zonesGeoJSON.features.forEach(f=>{
-        const c=turf.center(f).geometry.coordinates;
-        points.push({lat:c[1], lon:c[0], type:'zone', props:f.properties});
-      });
+      zonesGeoJSON.features.forEach(f=>{ const c=turf.center(f).geometry.coordinates; points.push({lat:c[1], lon:c[0], type:'zone', props:f.properties}); });
       for(let i=0;i<points.length;i++){
+        if(stopAutoExplore) break;
         const p=points[i];
         map.flyTo([p.lat,p.lon],16,{duration:3});
         if(p.type==='container') L.popup({maxWidth:250}).setLatLng([p.lat,p.lon]).setContent(makePopupHTML('container',p.props)).openOn(map);
