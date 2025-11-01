@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Ramallah Waste Dashboard</title>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Turf for spatial analysis -->
+  <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <style>
+    :root{
+      --bg: #f5f7fa;
+      --card: #ffffff;
+      --muted: #6b7280;
+      --accent: #2b8a78; /* soothing teal-green */
+      --accent-2: #4aa3a0;
+      --soft: #e6eef0;
+      --danger: #e06464;
+      --glass: rgba(255,255,255,0.75);
+      --round: 10px;
+      --shadow: 0 6px 18px rgba(20,30,40,0.08);
+    }
+
+    html,body,#map { height: 100%; margin:0; padding:0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; background: var(--bg); color: #0f172a; }
+
+    /* Top controls / header */
+    .topbar {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      top: 12px;
+      display:flex;
+      gap:12px;
+      z-index: 1200;
+      align-items:center;
+      backdrop-filter: blur(6px);
+      background: var(--glass);
+      border-radius: 12px;
+      padding: 8px 12px;
+      box-shadow: var(--shadow);
+    }
+    .stat {
+      display:flex; flex-direction:column; align-items:center; padding:6px 12px; border-radius:8px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.85), rgba(250,250,250,0.85));
+      min-width:110px;
+    }
+    .stat .num { font-weight:700; font-size:18px; color: var(--accent); }
+    .stat .label { font-size:12px; color:var(--muted); margin-top:4px; }
+
+    .controls { display:flex; gap:8px; align-items:center; }
+    .btn {
+      background: var(--accent);
+      color:white; border:none; padding:8px 12px; border-radius:8px; cursor:pointer;
+      box-shadow: 0 4px 10px rgba(43,138,120,0.18); font-weight:600;
+    }
+    .btn.secondary { background:transparent; color:var(--accent); border:1px solid rgba(43,138,120,0.14); box-shadow:none; }
+
+    /* Map container */
+    #map { position:absolute; inset:0; z-index:0; }
+
+    /* Sidebar */
+    .sidebar {
+      position: absolute;
+      top: 72px;
+      bottom: 18px;
+      width: 340px;
+      z-index: 1300;
+      background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(250,250,250,0.98));
+      box-shadow: var(--shadow);
+      border-radius: 12px;
+      overflow:auto;
+      transition: transform .28s cubic-bezier(.2,.9,.3,1), right .28s;
+      padding: 14px;
+    }
+    .sidebar.hidden { transform: translateX(110%); }
+    .sidebar.left { left: 18px; transform: translateX(-110%); }
+    .sidebar.right { right: 18px; transform: translateX(110%); }
+    .sidebar.open { transform: translateX(0); }
+    .sidebar h3 { margin:0 0 8px 0; color:#0f172a; }
+    .sidebar .meta { font-size:13px; color:var(--muted); margin-bottom:6px; }
+    .close-x { float:right; background:transparent; border:none; font-size:18px; cursor:pointer; color:var(--muted); }
+
+    .info-row { display:flex; gap:8px; align-items:center; padding:8px 0; border-bottom:1px dashed rgba(15,23,42,0.05); }
+    .icon-box { width:44px; height:44px; border-radius:8px; background:var(--soft); display:flex; align-items:center; justify-content:center; }
+    .info-key { font-size:13px; color:var(--muted); }
+    .info-val { font-weight:700; color:#0b1220; }
+
+    .analyze-area { margin-top:10px; display:flex; gap:8px; }
+    .text-input { flex:1; padding:8px 10px; border-radius:8px; border:1px solid rgba(15,23,42,0.06); background:white; }
+
+    /* Legend */
+    .legend {
+      position:absolute; left:12px; bottom:18px; z-index:1200;
+      background:var(--card); padding:10px 12px; border-radius:10px; box-shadow: var(--shadow);
+      font-size:13px; color:var(--muted);
+    }
+    .legend .row{ display:flex; align-items:center; gap:8px; margin:6px 0; }
+    .swatch { width:18px; height:12px; border-radius:4px; }
+
+    /* Popup custom */
+    .leaflet-popup-content-wrapper { border-radius:10px; box-shadow:var(--shadow); }
+    .popup-title { font-weight:700; margin-bottom:6px; color:#072020; display:flex; gap:8px; align-items:center; }
+    .popup-body { font-size:13px; color:var(--muted); }
+    .popup-actions { margin-top:8px; display:flex; gap:8px; }
+
+    /* responsive smaller screens */
+    @media (max-width:720px){
+      .sidebar { width: 86%; top:78px; padding:12px; }
+      .topbar { left: 12px; transform:none; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="topbar" id="topbar">
+    <div class="stat"><div class="num" id="zonesCount">—</div><div class="label">عدد المناطق</div></div>
+    <div class="stat"><div class="num" id="containersCount">—</div><div class="label">عدد الحاويات</div></div>
+    <div style="width:12px"></div>
+    <div class="controls">
+      <button class="btn" id="zoomTopBtn" title="Zoom to zone with most containers">Zoom ▶ أكبر منطقة</button>
+      <button class="btn secondary" id="toggleLegend">Legend</button>
+    </div>
+  </div>
+
+  <div id="map"></div>
+
+  <!-- Sidebar (will be .left or .right depending on language) -->
+  <div id="sidebar" class="sidebar right hidden" role="complementary" aria-hidden="true">
+    <button class="close-x" id="closeSidebar" title="Close">✕</button>
+    <h3 id="sidebarTitle">تفاصيل</h3>
+    <div class="meta" id="sidebarMeta">إضغط على منطقة أو حاوية لعرض التفاصيل</div>
+
+    <div id="sidebarContent">
+      <!-- dynamic content -->
+    </div>
+
+    <div style="margin-top:12px;">
+      <div style="font-size:13px;color:var(--muted);margin-bottom:6px;">أوامر الذكاء (محاكاة)</div>
+      <div class="analyze-area">
+        <input id="aiInput" class="text-input" placeholder="اكتب: حلّللي أماكن فيها قلة حاويات" />
+        <button class="btn" id="analyzeBtn">حلّل</button>
+      </div>
+      <div style="margin-top:10px; font-size:13px; color:var(--muted);">ملاحظة: التحليل يعتمد على قواعد إحصائية داخلية (محاكاة AI).</div>
+    </div>
+  </div>
+
+  <div id="legend" class="legend" style="display:none;">
+    <div style="font-weight:700; margin-bottom:6px;">Legend</div>
+    <div class="row"><div class="swatch" style="background: #fde68a"></div><div>منطقة (نسبة حاويات منخفضة)</div></div>
+    <div class="row"><div class="swatch" style="background: #a7f3d0"></div><div>منطقة (كثافة متوسطة/مرتفعة)</div></div>
+    <div class="row"><div class="swatch" style="background: orange"></div><div>حاويات</div></div>
+  </div>
+
+  <script>
+    // ---------- SETTINGS ----------
+    const ZONES_FILE = 'RamallahZones.json';
+    const CONTAINERS_FILE = 'wasteContainer.json';
+
+    // determine language and sidebar side
+    const lang = (navigator.language || 'en').toLowerCase();
+    const isArabic = lang.startsWith('ar');
+    const sidebar = document.getElementById('sidebar');
+    if (isArabic) {
+      sidebar.classList.remove('left'); sidebar.classList.add('right');
+      sidebar.style.direction = 'rtl';
+      // adjust labels to Arabic
+      document.querySelector('#topbar .label')?.textContent; // no-op placeholder
+      document.getElementById('sidebarTitle').textContent = 'تفاصيل';
+      document.getElementById('sidebarMeta').textContent = 'إضغط على منطقة أو حاوية لعرض التفاصيل';
+      document.getElementById('zoomTopBtn').textContent = 'تكبير ▶ أكبر منطقة';
+      document.getElementById('analyzeBtn').textContent = 'حلّل';
+    } else {
+      sidebar.classList.remove('right'); sidebar.classList.add('left');
+      sidebar.style.direction = 'ltr';
+      document.getElementById('sidebarTitle').textContent = 'Details';
+      document.getElementById('sidebarMeta').textContent = 'Click a zone or a container to see details';
+      document.getElementById('zoomTopBtn').textContent = 'Zoom ▶ Top Zone';
+      document.getElementById('analyzeBtn').textContent = 'Analyze';
+    }
+
+    // initialize map
+    const map = L.map('map', { zoomSnap: 0.25 }).setView([31.9045, 35.2045], 13);
+
+    // light basemap (Carto light)
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      maxZoom: 20,
+      attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
+    }).addTo(map);
+
+    // global layer holders
+    let zonesLayer = null;
+    let containersLayer = null;
+    let zonesGeoJSON = null;
+    let containersGeoJSON = null;
+    const lowZoneIds = new Set();
+
+    // UI elements refs
+    const zonesCountEl = document.getElementById('zonesCount');
+    const containersCountEl = document.getElementById('containersCount');
+    const closeSidebarBtn = document.getElementById('closeSidebar');
+    const sidebarContent = document.getElementById('sidebarContent');
+    const sidebarMeta = document.getElementById('sidebarMeta');
+    const aiInput = document.getElementById('aiInput');
+    const analyzeBtn = document.getElementById('analyzeBtn');
+    const zoomTopBtn = document.getElementById('zoomTopBtn');
+    const legendEl = document.getElementById('legend');
+    const toggleLegendBtn = document.getElementById('toggleLegend');
+
+    toggleLegendBtn.addEventListener('click', ()=> {
+      legendEl.style.display = legendEl.style.display === 'none' ? 'block' : 'none';
+    });
+
+    closeSidebarBtn.addEventListener('click', ()=> { closeSidebar(); });
+
+    function openSidebar() {
+      sidebar.classList.remove('hidden');
+      sidebar.classList.add('open');
+      sidebar.setAttribute('aria-hidden','false');
+    }
+    function closeSidebar() {
+      sidebar.classList.add('hidden');
+      sidebar.classList.remove('open');
+      sidebar.setAttribute('aria-hidden','true');
+    }
+
+    // create nice icon svgs (inline)
+    function binIconSVG(size=18){
+      return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="9" y="3" width="6" height="2" fill="${getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#2b8a78'}"/>
+        <path d="M6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7z" fill="orange"/>
+      </svg>`;
+    }
+    function zoneIconSVG(size=18){
+      return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="12" cy="12" r="9" fill="#a7f3d0"/>
+        <path d="M7 12h10" stroke="#065f46" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>`;
+    }
+
+    // Popup template (text + icons)
+    function makePopupHTML(type, properties){
+      const title = properties.NAME_ENGLI || properties.NAME || properties.TYPE_OF_WA || properties.name || '—';
+      const icon = type === 'zone' ? zoneIconSVG(20) : binIconSVG(18);
+      const propsList = Object.entries(properties).map(([k,v]) => `<div style="display:flex;justify-content:space-between;margin:4px 0;"><div style="color:var(--muted);font-size:13px">${k}</div><div style="font-weight:700">${v}</div></div>`).join('');
+      const openSideBtnText = isArabic ? 'افتح النافذة' : 'Open details';
+      return `
+        <div style="min-width:220px">
+          <div class="popup-title">${icon}<div>${title}</div></div>
+          <div class="popup-body">${propsList}</div>
+          <div class="popup-actions">
+            <button class="btn" onclick="openDetailsFromPopup('${type}','${encodeURIComponent(JSON.stringify(properties))}')">${openSideBtnText}</button>
+          </div>
+        </div>
+      `;
+    }
+
+    // function called by popup action
+    window.openDetailsFromPopup = function(type, propsStr){
+      const props = JSON.parse(decodeURIComponent(propsStr));
+      showSidebarFor(type, props);
+    };
+
+    // load data
+    async function loadData(){
+      try {
+        const [zonesResp, contResp] = await Promise.all([fetch(ZONES_FILE), fetch(CONTAINERS_FILE)]);
+        if (!zonesResp.ok || !contResp.ok) throw new Error('Failed to load GeoJSON files (check names & path).');
+
+        zonesGeoJSON = await zonesResp.json();
+        containersGeoJSON = await contResp.json();
+
+        // build layers
+        buildContainersLayer();
+        buildZonesLayer();
+
+        // counters
+        zonesCountEl.textContent = zonesGeoJSON.features.length;
+        containersCountEl.textContent = containersGeoJSON.features.length;
+
+        // add layers to map
+        zonesLayer.addTo(map);
+        containersLayer.addTo(map);
+
+        fitMapToData();
+
+      } catch (err) {
+        alert('Error loading data: ' + err.message + '. تأكدي من أسماء الملفات ومكانها.');
+        console.error(err);
+      }
+    }
+
+    function fitMapToData(){
+      try{
+        const combined = L.featureGroup([zonesLayer, containersLayer]);
+        map.fitBounds(combined.getBounds(), { padding:[30,30] });
+      }catch(e){}
+    }
+
+    // Build containers layer
+    function buildContainersLayer(){
+      containersLayer = L.geoJSON(containersGeoJSON, {
+        pointToLayer: function(feature, latlng){
+          return L.circleMarker(latlng, { radius:5, fillColor:'orange', color:'orange', weight:1, opacity:1, fillOpacity:0.9 });
+        },
+        onEachFeature: function(feature, layer){
+          const popup = makePopupHTML('container', feature.properties || {});
+          layer.bindPopup(popup, { maxWidth: 300, className: 'custom-popup' });
+
+          layer.on('click', function(){
+            // open sidebar with container details
+            showSidebarFor('container', feature.properties);
+          });
+        }
+      });
+    }
+
+    // Build zones layer with default styling
+    function buildZonesLayer(){
+      zonesLayer = L.geoJSON(zonesGeoJSON, {
+        style: function(feature){
+          const id = feature.properties.ID || feature.properties.id || feature.properties.MAIL_CODE || feature.properties.NAME_ENGLI || Math.random();
+          const base = { fillColor:'#a7f3d0', fillOpacity:0.35, color:'#9ae6b4', weight:1, opacity:0.9 };
+          if (lowZoneIds.has(id)) {
+            return { ...base, fillColor:'#fde68a', color:'#facc15' };
+          }
+          return base;
+        },
+        onEachFeature: function(feature, layer){
+          const popup = makePopupHTML('zone', feature.properties || {});
+          layer.bindPopup(popup, { maxWidth: 320, className: 'custom-popup' });
+
+          layer.on('click', function(){
+            showSidebarFor('zone', feature.properties);
+          });
+        }
+      });
+    }
+
+    // Show data in sidebar
+    function showSidebarFor(type, properties){
+      openSidebar();
+      const title = properties.NAME_ENGLI || properties.NAME || properties.TYPE_OF_WA || properties.name || (type === 'zone' ? (isArabic? 'منطقة' : 'Zone') : (isArabic? 'حاوية' : 'Container'));
+      document.getElementById('sidebarTitle').textContent = title;
+      sidebarMeta.textContent = isArabic ? 'تفاصيل العنصر' : 'Item details';
+
+      // build content
+      let html = '';
+      html += `<div class="info-row"><div class="icon-box">${type==='zone'? zoneIconSVG(): binIconSVG()}</div><div style="flex:1"><div class="info-key">${isArabic? 'الاسم' : 'Name'}</div><div class="info-val">${title}</div></div></div>`;
+      // include key properties
+      const skipKeys = ['geometry'];
+      for (const [k,v] of Object.entries(properties)){
+        if (skipKeys.includes(k)) continue;
+        html += `<div style="padding:8px 0;border-bottom:1px dashed rgba(15,23,42,0.04)"><div style="font-size:13px;color:var(--muted)">${k}</div><div style="font-weight:700">${v}</div></div>`;
+      }
+      html += `<div style="margin-top:10px; display:flex; gap:8px;"><button class="btn" id="zoomToFeatureBtn">${isArabic ? 'تكبير للعنصر' : 'Zoom to item'}</button><button class="btn secondary" id="closeSideSmall">${isArabic ? 'اغلاق' : 'Close'}</button></div>`;
+
+      sidebarContent.innerHTML = html;
+
+      // attach events
+      document.getElementById('zoomToFeatureBtn').addEventListener('click', ()=> {
+        // try to locate matching geometry in zones or containers and zoom
+        let found = null;
+        if (type === 'zone'){
+          zonesLayer.eachLayer(l => {
+            const props = l.feature && l.feature.properties;
+            if (props && (props.NAME_ENGLI === properties.NAME_ENGLI || props.NAME === properties.NAME || props.MAIL_CODE === properties.MAIL_CODE)) found = l;
+          });
+        } else {
+          containersLayer.eachLayer(l => {
+            const props = l.feature && l.feature.properties;
+            if (props && (props.ID === properties.ID || props.TYPE_OF_WA === properties.TYPE_OF_WA || props.name === properties.name)) found = l;
+          });
+        }
+        if (found) {
+          map.fitBounds(found.getBounds ? found.getBounds() : L.latLngBounds(found.getLatLng(), found.getLatLng()), { maxZoom: 18, padding:[30,30] });
+        } else {
+          // fallback: just close sidebar
+        }
+      });
+
+      document.getElementById('closeSideSmall').addEventListener('click', ()=> closeSidebar());
+    }
+
+    // ---------- ANALYSIS: assign container counts per zone using turf ----------
+    function computeCountsPerZone(){
+      const zoneCounts = {}; // id -> count
+      if (!zonesGeoJSON || !containersGeoJSON) return zoneCounts;
+
+      const pts = containersGeoJSON;
+      const polys = zonesGeoJSON;
+
+      for (let i=0;i<polys.features.length;i++){
+        const poly = polys.features[i];
+        const pid = poly.properties.ID || poly.properties.MAIL_CODE || poly.properties.NAME_ENGLI || i;
+        // bbox search optimization could be added, but turf.pointsWithinPolygon is okay for moderate datasets
+        try {
+          const ptsWithin = turf.pointsWithinPolygon(pts, poly);
+          zoneCounts[pid] = ptsWithin.features.length;
+        } catch(e){
+          zoneCounts[pid] = 0;
+        }
+      }
+      return zoneCounts;
+    }
+
+    // find zone with most containers
+    function findTopZone(zoneCounts){
+      let maxId = null; let maxCount = -1;
+      for (const [k,v] of Object.entries(zoneCounts)){
+        if (v > maxCount) { maxCount = v; maxId = k; }
+      }
+      return { id: maxId, count: maxCount };
+    }
+
+    // Zoom to zone with most containers
+    zoomTopBtn.addEventListener('click', ()=>{
+      if (!zonesGeoJSON || !containersGeoJSON) return alert(isArabic ? 'البيانات لم تُحمّل بعد' : 'Data not loaded yet');
+      const counts = computeCountsPerZone();
+      const top = findTopZone(counts);
+      if (!top.id) return alert(isArabic ? 'لم يتم العثور على مناطق' : 'No zones found');
+      // find zone layer
+      let targetLayer = null;
+      zonesLayer.eachLayer(l => {
+        const props = l.feature && l.feature.properties;
+        const pid = props && (props.ID || props.MAIL_CODE || props.NAME_ENGLI);
+        if (String(pid) === String(top.id)){
+          targetLayer = l;
+        }
+      });
+      if (targetLayer){
+        map.fitBounds(targetLayer.getBounds(), { maxZoom:16, padding:[30,30] });
+        // open details
+        showSidebarFor('zone', targetLayer.feature.properties);
+      } else {
+        alert(isArabic ? 'تعذر إيجاد الطبقة' : 'Could not find layer');
+      }
+    });
+
+    // ----- AI-style analyze: simple heuristic -----
+    analyzeBtn.addEventListener('click', ()=>{
+      const cmd = (aiInput.value || '').trim().toLowerCase();
+      // expect phrase like "حلّللي أماكن فيها قلة حاويات" or english "analyze low container areas"
+      if (!cmd) return alert(isArabic ? 'اكتبي أمر التحليل' : 'Type an analysis command');
+
+      // compute counts
+      const counts = computeCountsPerZone();
+      const values = Object.values(counts);
+      if (values.length === 0) return alert(isArabic ? 'لا توجد بيانات' : 'No data');
+
+      // decide threshold: zones with counts below 25th percentile => 'low'
+      values.sort((a,b)=>a-b);
+      const q25 = values[Math.floor(values.length * 0.25)] || 0;
+      // mark low zones
+      lowZoneIds.clear();
+      for (const [id,cnt] of Object.entries(counts)){
+        if (cnt <= q25) lowZoneIds.add(String(id));
+      }
+
+      // re-style zones layer
+      zonesLayer.remove();
+      buildZonesLayer();
+      zonesLayer.addTo(map);
+
+      // zoom to show low zones if any
+      if (lowZoneIds.size > 0){
+        // collect bounds of low zones
+        const lowLayers = [];
+        zonesLayer.eachLayer(l=>{
+          const props = l.feature && l.feature.properties;
+          const pid = String(props.ID || props.MAIL_CODE || props.NAME_ENGLI || '');
+          if (lowZoneIds.has(pid)) lowLayers.push(l);
+        });
+        if (lowLayers.length>0){
+          const fg = L.featureGroup(lowLayers);
+          map.fitBounds(fg.getBounds(), { padding:[30,30] });
+          alert(isArabic ? `تم تلوين ${lowLayers.length} منطقة كـ"قلة حاويات".` : `Marked ${lowLayers.length} zones as "low containers".`);
+        } else {
+          alert(isArabic ? 'لم تُعرف أي مناطق ذات قلة حاويات.' : 'No low-container zones detected.');
+        }
+      } else {
+        alert(isArabic ? 'لا مناطق ذات قلة واضحة.' : 'No clearly low zones.');
+      }
+    });
+
+    // init loading
+    loadData();
+
+  </script>
+</body>
+</html>
