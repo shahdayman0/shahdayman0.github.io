@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -102,6 +103,13 @@ html,body,#map { height: 100%; margin:0; padding:0; font-family: Inter, ui-sans-
   <h3 id="sidebarTitle">تفاصيل</h3>
   <div class="meta" id="sidebarMeta">إضغط على منطقة أو حاوية لعرض التفاصيل</div>
   <div id="sidebarContent"></div>
+  <div style="margin-top:12px;">
+    <div style="font-size:13px;color:var(--muted);margin-bottom:6px;">أوامر الذكاء (محاكاة)</div>
+    <div class="analyze-area">
+      <input id="aiInput" class="text-input" placeholder="اكتب: حلّللي أماكن فيها قلة حاويات" />
+      <button class="btn" id="analyzeBtn">حلّل</button>
+    </div>
+  </div>
 </div>
 
 <!-- Legend -->
@@ -112,10 +120,32 @@ html,body,#map { height: 100%; margin:0; padding:0; font-family: Inter, ui-sans-
   <div class="row"><div class="swatch" style="background: orange"></div><div>حاويات</div></div>
 </div>
 
+<!-- Comment Box -->
+<div id="commentBox" style="
+    position:absolute;
+    bottom:80px;
+    right:12px;
+    z-index:1400;
+    background:white;
+    padding:10px;
+    border-radius:10px;
+    box-shadow:0 4px 12px rgba(0,0,0,0.15);
+    width:240px;
+    font-size:13px;
+    max-height:200px;
+    overflow:auto;
+">
+  <div style="font-weight:700; margin-bottom:6px;">💬 الملاحظات / التعليقات</div>
+  <textarea id="commentInput" placeholder="اكتب هنا ملاحظاتك..." style="width:100%; height:60px; border-radius:6px; border:1px solid #ccc; padding:6px; resize:none;"></textarea>
+  <button id="addCommentBtn" class="btn" style="margin-top:6px; width:100%;">أضف التعليق</button>
+  <div id="commentsList" style="margin-top:6px;"></div>
+</div>
+
 <script>
 const ZONES_FILE = 'RamallahZones.json';
 const CONTAINERS_FILE = 'wasteContainer.json';
 
+// Map
 const map = L.map('map', { zoomSnap: 0.25 }).setView([31.9045, 35.2045], 13);
 L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { maxZoom: 20, attribution: '&copy; OpenStreetMap contributors &copy; CARTO' }).addTo(map);
 
@@ -127,7 +157,6 @@ coordsDiv.onAdd = function(map){
   return this._div;
 };
 coordsDiv.addTo(map);
-
 map.on('mousemove', function(e){
   coordsDiv._div.innerHTML = `Lat: ${e.latlng.lat.toFixed(5)}, Lng: ${e.latlng.lng.toFixed(5)}`;
 });
@@ -135,7 +164,7 @@ map.on('mousemove', function(e){
 // ===== Scale in Kilometers =====
 L.control.scale({ metric: true, imperial: false, position: 'bottomright' }).addTo(map);
 
-// Global variables
+// Global
 let zonesLayer=null, containersLayer=null, zonesGeoJSON=null, containersGeoJSON=null;
 const lowZoneIds = new Set();
 let stopAutoExplore = false;
@@ -147,6 +176,8 @@ const closeSidebarBtn = document.getElementById('closeSidebar');
 const sidebar = document.getElementById('sidebar');
 const sidebarContent = document.getElementById('sidebarContent');
 const sidebarMeta = document.getElementById('sidebarMeta');
+const aiInput = document.getElementById('aiInput');
+const analyzeBtn = document.getElementById('analyzeBtn');
 const zoomTopBtn = document.getElementById('zoomTopBtn');
 const legendEl = document.getElementById('legend');
 const toggleLegendBtn = document.getElementById('toggleLegend');
@@ -154,13 +185,29 @@ const autoExploreBtn = document.getElementById('autoExploreBtn');
 const stopExploreBtn = document.getElementById('stopExploreBtn');
 const splash = document.getElementById('splash');
 
+// Comment Box
+const commentInput = document.getElementById('commentInput');
+const addCommentBtn = document.getElementById('addCommentBtn');
+const commentsList = document.getElementById('commentsList');
+addCommentBtn.addEventListener('click', ()=>{
+  const text = commentInput.value.trim();
+  if(!text) return;
+  const div = document.createElement('div');
+  div.style.padding="4px 6px"; div.style.marginBottom="4px"; div.style.borderBottom="1px dashed #eee";
+  div.textContent = "• " + text;
+  commentsList.prepend(div);
+  commentInput.value="";
+});
+
 // Splash screen fade
 window.addEventListener('load', ()=>{ setTimeout(()=>{ splash.classList.add('splash-hidden'); },2000); });
 
-// Sidebar
+// Sidebar functions
 function openSidebar(){ sidebar.classList.remove('hidden'); sidebar.classList.add('open'); }
 function closeSidebar(){ sidebar.classList.add('hidden'); sidebar.classList.remove('open'); }
 closeSidebarBtn.addEventListener('click', closeSidebar);
+
+// Toggle legend
 toggleLegendBtn.addEventListener('click', ()=>{ legendEl.style.display = legendEl.style.display==='none'?'block':'none'; });
 
 // Load data
@@ -197,18 +244,23 @@ function showSidebarFor(type, properties){
   sidebarContent.innerHTML = `<div><b>${title}</b></div>`;
 }
 
-// Zoom top zone button
-zoomTopBtn.addEventListener('click',()=>{
-  if(!zonesGeoJSON) return;
-  const topZone = zonesGeoJSON.features[0]; // Example, you can implement logic
-  const layer = zonesLayer.getLayers().find(l=>l.feature===topZone);
-  if(layer) map.fitBounds(layer.getBounds());
-});
+// Auto Explore
+autoExploreBtn.addEventListener('click',()=>{ stopAutoExplore=false; autoExplore(); });
+stopExploreBtn.addEventListener('click',()=>{ stopAutoExplore=true; });
+async function autoExplore(){
+  const layers=[...zonesLayer.getLayers(), ...containersLayer.getLayers()];
+  for(let i=0;i<layers.length;i++){
+    if(stopAutoExplore) break;
+    const l=layers[i];
+    map.flyToBounds(l.getBounds ? l.getBounds() : L.latLngBounds(l.getLatLng(), l.getLatLng()),{duration:2});
+    showSidebarFor(l.feature.geometry.type==='Polygon'?'zone':'container', l.feature.properties);
+    await new Promise(r=>setTimeout(r,2500));
+  }
+}
 
 // Load initial data
 loadData();
 </script>
 </body>
 </html>
-
 
